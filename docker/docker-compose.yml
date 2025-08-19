@@ -1,0 +1,90 @@
+name: biblioflow
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_DB: ${MONGO_DB}
+    volumes:
+      - mongodata:/data/db
+      - ./mongodb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - backend
+
+  api:
+    build:
+      context: ../biblioflow/biblioflow-backend
+      dockerfile: Dockerfile
+    environment:
+      PORT: ${BACKEND_PORT}
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+      MONGODB_URL: ${MONGODB_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    expose:
+      - "${BACKEND_PORT}"
+    networks:
+      - backend
+
+  frontend:
+    build:
+      context: ../biblioflow/biblioflow-frontend
+      dockerfile: Dockerfile
+    expose:
+      - "80"
+    networks:
+      - frontend
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      api:
+        condition: service_started
+      frontend:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - frontend
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+
+volumes:
+  pgdata:
+  mongodata:
