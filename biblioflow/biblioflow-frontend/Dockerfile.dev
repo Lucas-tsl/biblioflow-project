@@ -1,0 +1,23 @@
+# Dockerfile.dev pour développement avec hot reload
+FROM node:20-alpine
+
+# Outils utiles pour le développement
+RUN apk add --no-cache curl git
+
+WORKDIR /app
+
+# Installer les dépendances (toutes incluses en dev)
+COPY package*.json ./
+RUN npm ci --include=dev
+
+# Installer globalement Angular CLI
+RUN npm install -g @angular/cli
+
+# Copier le code source
+COPY . .
+
+# Exposer le port de développement
+EXPOSE 4200
+
+# Mode développement avec watch et hot reload
+CMD ["ng", "serve", "--host", "0.0.0.0", "--port", "4200", "--poll", "2000"]

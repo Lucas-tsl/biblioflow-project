@@ -1,0 +1,117 @@
+name: biblioflow-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+    ports:
+      - "5432:5432"  # Exposé pour debug
+
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_DB: ${MONGO_DB}
+    volumes:
+      - mongodata_dev:/data/db
+      - ./mongodb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - backend
+    ports:
+      - "27017:27017"  # Exposé pour debug
+
+  api:
+    build:
+      context: ../biblioflow/biblioflow-backend
+      dockerfile: Dockerfile.dev
+    environment:
+      PORT: ${BACKEND_PORT}
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+      MONGODB_URL: ${MONGODB_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    volumes:
+      # Hot reload - bind mount du code source
+      - ../biblioflow/biblioflow-backend/src:/app/src:ro
+      - ../biblioflow/biblioflow-backend/package.json:/app/package.json:ro
+      - ../biblioflow/biblioflow-backend/tsconfig.json:/app/tsconfig.json:ro
+      # Volume pour node_modules (évite conflits)
+      - api_node_modules:/app/node_modules
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"  # Direct access pour debug
+      - "9229:9229"  # Debug port
+    networks:
+      - backend
+    command: ["npm", "run", "start:dev"]
+
+  frontend:
+    build:
+      context: ../biblioflow/biblioflow-frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      # Hot reload - bind mount du code source
+      - ../biblioflow/biblioflow-frontend/src:/app/src:ro
+      - ../biblioflow/biblioflow-frontend/angular.json:/app/angular.json:ro
+      - ../biblioflow/biblioflow-frontend/package.json:/app/package.json:ro
+      - ../biblioflow/biblioflow-frontend/tsconfig.json:/app/tsconfig.json:ro
+      # Volume pour node_modules
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "4200:4200"  # Direct access
+    networks:
+      - frontend
+    command: ["npm", "start", "--", "--host", "0.0.0.0", "--poll", "2000"]
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      api:
+        condition: service_started
+      frontend:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - frontend
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+
+volumes:
+  pgdata_dev:
+  mongodata_dev:
+  api_node_modules:
+  frontend_node_modules:

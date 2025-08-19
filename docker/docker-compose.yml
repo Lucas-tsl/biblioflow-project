@@ -54,6 +54,28 @@ services:
       - "${BACKEND_PORT}"
     networks:
       - backend
+    # Resource limits pour éviter la monopolisation
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    # Restart policy
+    restart: unless-stopped
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Labels pour monitoring
+    labels:
+      - "app=biblioflow"
+      - "service=api"
+      - "environment=production"
 
   frontend:
     build:
@@ -63,6 +85,27 @@ services:
       - "80"
     networks:
       - frontend
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    restart: unless-stopped
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Labels pour monitoring
+    labels:
+      - "app=biblioflow"
+      - "service=frontend"
+      - "environment=production"
 
   nginx:
     image: nginx:alpine
@@ -78,6 +121,33 @@ services:
     networks:
       - frontend
       - backend
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    restart: unless-stopped
+    # Healthcheck pour nginx
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Labels pour monitoring
+    labels:
+      - "app=biblioflow"
+      - "service=nginx"
+      - "environment=production"
 
 networks:
   frontend:

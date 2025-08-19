@@ -1,70 +1,85 @@
 # BiblioFlow — Application Full-Stack (Angular + NestJS + Docker)
 
-Application complète **BiblioFlow** avec frontend Angular, backend NestJS et orchestration Docker.
+🚀 **Application complète** avec frontend Angular, backend NestJS et orchestration Docker production-ready.
+
+**Stack :** PostgreSQL + MongoDB + NestJS + Angular + Nginx | **Status :** ✅ Production Ready
 
 ---
 
-## 🚀 Démarrage rapide
+## ⚡ Démarrage Rapide
 
-### 🐳 Avec Docker Compose (Recommandé)
 ```bash
 git clone https://github.com/Lucas-tsl/biblioflow-project.git
 cd biblioflow-project/docker
 docker compose --env-file ./.env up -d --build
 ```
 
-**Accès :** http://localhost (Frontend + API via Nginx)
+🌐 **Accès :** http://localhost | 📊 **Monitoring :** `docker compose ps`
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture & Services
 
-- **Frontend Angular** : Interface utilisateur moderne
-- **Backend NestJS** : API REST avec authentification JWT
-- **PostgreSQL** : Base de données principale (persistante)
-- **MongoDB** : Base de données logs
-- **Nginx** : Reverse proxy
-
----
-
-## 📚 API Endpoints
-
-**Base :** `http://localhost/api`
-
-- `GET /books` - Lister les livres
-- `POST /books` - Créer un livre
-- `GET /health` - État de l'API
+| Service | Rôle | Port | Status |
+|---------|------|------|--------|
+| **Frontend** | Angular UI | 80 (Nginx) | ✅ Hot reload |
+| **API** | NestJS REST | 8080 | ✅ JWT Auth |
+| **PostgreSQL** | Base principale | 5432 | ✅ Persistant |
+| **MongoDB** | Logs & Audit | 27017 | ✅ Réplication |
+| **Nginx** | Reverse Proxy | 80 | ✅ Load balancing |
 
 ---
 
-## 🛠️ Développement local
+## 🛠️ Commandes Essentielles
 
+### Production
 ```bash
-# Backend
-cd biblioflow/biblioflow-backend
-npm install && npm run start:dev  # → :8080
-
-# Frontend  
-cd biblioflow/biblioflow-frontend
-npm install && npm start  # → :4200
+docker compose ps                    # État des services
+docker compose logs -f api          # Logs temps réel
+curl http://localhost/healthz        # Health check
 ```
 
----
-
-## 🔧 Docker
-
+### Développement
 ```bash
-# Gérer la stack
-docker compose ps              # État des services
-docker compose logs -f api     # Logs en temps réel
-docker compose down            # Arrêter
+./dev.sh start                      # 🔥 Hot reload complet
+./dev.sh logs                       # 📊 Logs multicouleurs
+./dev.sh shell-api                  # 🐚 Shell backend
+./dev.sh db-postgres                # 🗄️ PostgreSQL CLI
+```
 
-# Accès aux bases
+### Base de données
+```bash
 docker compose exec postgres psql -U biblio -d biblioflow
 docker compose exec mongodb mongosh -u admin -p adminpass
 ```
 
 ---
 
-**Stack :** PostgreSQL + MongoDB + NestJS + Angular + Nginx  
-**Fonctionnalités :** Health checks, volumes persistants, orchestration complète
+## 🎯 Fonctionnalités
+
+<table>
+<tr>
+<td width="50%">
+
+**🏭 Production Ready**
+- ✅ Orchestration 5 services
+- ✅ Resource limits & restart policies
+- ✅ Logs centralisés + rotation  
+- ✅ Healthchecks automatiques
+- ✅ Réseaux sécurisés
+
+</td>
+<td width="50%">
+
+**🔧 Développement**
+- ✅ Hot reload Angular + NestJS
+- ✅ Scripts automatisés (`./dev.sh`)
+- ✅ VSCode debugging intégré
+- ✅ Bind mounts code source
+- ✅ Debug ports exposés
+
+</td>
+</tr>
+</table>
+
+**API Endpoints :** `http://localhost/api` → `/books`, `/health` | **Auth :** JWT Ready

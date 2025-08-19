@@ -1,0 +1,23 @@
+# Dockerfile.dev pour développement avec hot reload
+FROM node:20-alpine
+
+# Outils utiles pour le développement
+RUN apk add --no-cache curl git
+
+WORKDIR /app
+
+# Installer les dépendances (toutes incluses en dev)
+COPY package*.json ./
+RUN npm ci --include=dev
+
+# Installer globalement les outils de développement
+RUN npm install -g @nestjs/cli nodemon
+
+# Copier le code source
+COPY . .
+
+# Exposer ports pour l'app et debug
+EXPOSE 8080 9229
+
+# Mode développement avec watch
+CMD ["npm", "run", "start:dev"]
