@@ -50,7 +50,7 @@ pipeline {
       steps {
         retry(10) {
           sh '''
-            curl -fsS http://localhost:8082/ > /dev/null || (docker-compose -f "$COMPOSE_BASE" -f "$COMPOSE_CI" ps && sleep 3 && false)
+            curl -fsS http://localhost:8084/ > /dev/null || (docker-compose -f "$COMPOSE_BASE" -f "$COMPOSE_CI" ps && sleep 3 && false)
           '''
         }
       }

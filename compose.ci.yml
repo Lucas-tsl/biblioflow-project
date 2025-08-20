@@ -15,4 +15,6 @@ services:
   frontend:
     build:
       context: ./biblioflow/biblioflow-frontend
+    ports:
+      - "8084:80"  # Port différent pour CI
     volumes: [] # IMPORTANT
