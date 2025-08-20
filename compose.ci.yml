@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: ./biblioflow/biblioflow-backend
+      args:
+        - NODE_ENV=production
+    environment:
+      - NODE_ENV=test
+    volumes: [] # IMPORTANT : pas de bind mount en CI
+    healthcheck:
+      test: ["CMD","curl","-f","http://localhost:8080/health"]
+      interval: 5s
+      retries: 30
+
+  frontend:
+    build:
+      context: ./biblioflow/biblioflow-frontend
+    volumes: [] # IMPORTANT

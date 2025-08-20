@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: ./biblioflow/biblioflow-backend
+    image: myapp/backend:latest
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "8081:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [app_net]
+
+  frontend:
+    build:
+      context: ./biblioflow/biblioflow-frontend
+    image: myapp/frontend:latest
+    ports:
+      - "8082:80"
+    networks: [app_net]
+
+  db:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=myapp
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-changeme}
+      - POSTGRES_DB=mydb
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      retries: 20
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks: [app_net]
+
+volumes:
+  db_data:
+networks:
+  app_net:

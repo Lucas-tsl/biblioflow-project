@@ -1,0 +1,15 @@
+services:
+  backend:
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./biblioflow/biblioflow-backend:/app
+    command: npm run start:dev
+
+  frontend:
+    volumes:
+      - ./biblioflow/biblioflow-frontend:/usr/share/nginx/html # ou :/app si Vite/Angular dev server
+    # Si dev server :
+    # command: npm run start
+    # ports:
+    #   - "4200:4200"

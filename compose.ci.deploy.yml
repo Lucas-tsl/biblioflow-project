@@ -1,0 +1,8 @@
+services:
+  backend:
+    image: registry.example.com/myapp/backend:${GIT_COMMIT}
+    restart: unless-stopped
+
+  frontend:
+    image: registry.example.com/myapp/frontend:${GIT_COMMIT}
+    restart: unless-stopped
