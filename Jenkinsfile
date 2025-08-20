@@ -23,6 +23,32 @@ pipeline {
       steps { checkout scm }
     }
 
+    stage('Check mounts') {
+      steps {
+        sh '''#!/bin/bash
+          set -eu
+          # Choix CLI compose
+          if command -v docker-compose >/dev/null 2>&1; then C="docker-compose"; else C="docker compose"; fi
+
+          echo "[1/3] Compose effectif (merge) – volumes de frontend:"
+          $C -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" config | awk '
+            $0 ~ /^services:/ {in_services=1}
+            in_services && $0 ~ /^  frontend:/ {in_frontend=1}
+            in_frontend && $0 ~ /^  [^ ]/ && $0 !~ /^  frontend:/ {in_frontend=0}
+            in_frontend {print}
+          ' | sed -n '/volumes:/,/^[^ ]/p' || true
+
+          echo "[2/3] Garde-fou contre bind mount .:/app:"
+          if $C -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" config | grep -qE '\\.:/app'; then
+            echo "::error::Bind mount .:/app détecté — interdit en CI"
+            exit 1
+          else
+            echo "✅ Aucun bind mount problématique détecté"
+          fi
+        '''
+      }
+    }
+
     stage('Diag Docker') {
       steps {
         sh '''#!/bin/bash
