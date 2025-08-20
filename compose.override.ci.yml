@@ -1,0 +1,4 @@
+services:
+  frontend:
+    ports:
+      - "8084:80"  # Override pour CI uniquement

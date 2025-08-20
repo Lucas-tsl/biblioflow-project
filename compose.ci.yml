@@ -18,3 +18,4 @@ services:
     ports:
       - "8084:80"  # Port différent pour CI
     volumes: [] # IMPORTANT
+    networks: [app_net]
