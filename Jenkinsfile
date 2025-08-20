@@ -25,7 +25,7 @@ pipeline {
 
     stage('Diag Docker') {
       steps {
-        sh '''
+        sh '''#!/bin/bash
           set -euxo pipefail
           echo "PATH=$PATH"
           id
@@ -41,7 +41,7 @@ pipeline {
 
     stage('Preflight') {
       steps {
-        sh '''
+        sh '''#!/bin/bash
           set -euo pipefail
           # Fichiers compose requis
           for f in "$COMPOSE_BASE" "$COMPOSE_CI" "$COMPOSE_OVERRIDE"; do
@@ -77,7 +77,7 @@ pipeline {
 
     stage('Build image (frontend)') {
       steps {
-        sh '''
+        sh '''#!/bin/bash
           set -euo pipefail
           if command -v docker-compose >/dev/null 2>&1; then
             COMPOSE_CLI="docker-compose"
@@ -92,7 +92,7 @@ pipeline {
 
     stage('Run (CI)') {
       steps {
-        sh '''
+        sh '''#!/bin/bash
           set -euo pipefail
           if command -v docker-compose >/dev/null 2>&1; then
             COMPOSE_CLI="docker-compose"
@@ -108,7 +108,7 @@ pipeline {
     stage('Smoke test') {
       steps {
         retry(10) {
-          sh '''
+          sh '''#!/bin/bash
             set -euo pipefail
             if command -v docker-compose >/dev/null 2>&1; then
               COMPOSE_CLI="docker-compose"
@@ -126,7 +126,7 @@ pipeline {
     always {
       script {
         if (env.BRANCH_NAME && env.BRANCH_NAME != 'main') {
-          sh '''
+          sh '''#!/bin/bash
             set -euo pipefail
             if command -v docker-compose >/dev/null 2>&1; then
               COMPOSE_CLI="docker-compose"
