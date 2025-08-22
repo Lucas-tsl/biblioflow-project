@@ -6,16 +6,39 @@ services:
         - NODE_ENV=production
     environment:
       - NODE_ENV=test
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=mydb
+      - DB_USER=myapp
+      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+    ports:
+      - "8085:8080"  # Port différent pour éviter conflit avec Jenkins
     volumes: [] # IMPORTANT : pas de bind mount en CI
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD","curl","-f","http://localhost:8080/health"]
-      interval: 5s
+      interval: 10s
       retries: 30
+      start_period: 30s
+    networks: [app_net]
 
   frontend:
     build:
       context: ./biblioflow/biblioflow-frontend
     ports:
       - "8084:80"  # Port différent pour CI
-    volumes: [] # IMPORTANT
+    volumes: [] # IMPORTANT : pas de bind mount en CI
     networks: [app_net]
+
+  db:
+    environment:
+      - POSTGRES_USER=myapp
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-changeme}
+      - POSTGRES_DB=mydb
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      retries: 30
+      start_period: 10s

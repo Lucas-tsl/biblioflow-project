@@ -1,0 +1,315 @@
+pipeline {
+  agent any
+  options {
+    timestamps()
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    timeout(time: 30, unit: 'MINUTES')
+  }
+  tools {
+    nodejs 'Node_24'
+  }
+  environment {
+    COMPOSE_BASE      = "compose.yml"
+    COMPOSE_CI        = "compose.ci.yml"
+    COMPOSE_OVERRIDE  = "compose.override.ci.yml"
+    // Assure un PATH standard même en non-login shell
+    PATH = "/usr/local/bin:/usr/bin:/bin:${PATH}"
+    DOCKER_BUILDKIT = "1"
+    // Variables pour la base de données
+    DB_PASSWORD = "changeme_ci"
+    NODE_ENV = "test"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { 
+        checkout scm
+        echo "✅ Code source récupéré"
+      }
+    }
+
+    stage('Preflight') {
+      steps {
+        sh '''#!/bin/bash
+          set -euo pipefail
+          echo "🔍 Vérification de l'environnement CI..."
+          
+          # Fichiers compose requis
+          for f in "$COMPOSE_BASE" "$COMPOSE_CI" "$COMPOSE_OVERRIDE"; do
+            [ -f "$f" ] || { echo "::error::$f missing"; exit 1; }
+            echo "✅ $f présent"
+          done
+
+          # Docker CLI présent et exécutable ?
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::docker CLI introuvable dans le PATH"
+            exit 1
+          fi
+          echo "✅ Docker CLI disponible"
+
+          # Détection Compose v1 vs v2
+          if command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CLI="docker-compose"
+          else
+            COMPOSE_CLI="docker compose"
+          fi
+          echo "✅ Using COMPOSE_CLI='$COMPOSE_CLI'"
+          $COMPOSE_CLI version
+
+          # Garde-fou contre bind mount
+          if $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" config | grep -qE '\\.:/app'; then
+            echo "::error::Bind mount .:/app détecté — interdit en CI"
+            exit 1
+          else
+            echo "✅ Aucun bind mount problématique détecté"
+          fi
+        '''
+      }
+    }
+
+    stage('Prepare .env') {
+      steps {
+        sh '''#!/bin/bash
+          set -euo pipefail
+          echo "🔧 Préparation des variables d'environnement pour CI..."
+          
+          # Créer .env pour CI
+          cat > .env << EOF
+# Configuration CI/Test
+NODE_ENV=test
+DB_PASSWORD=${DB_PASSWORD}
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=mydb_test
+DB_USER=myapp
+
+# URLs pour tests
+FRONTEND_URL=http://localhost:8084
+BACKEND_URL=http://localhost:8085
+
+# Sécurité
+JWT_SECRET=test_secret_key_change_in_production
+BCRYPT_ROUNDS=4
+
+# Logs
+LOG_LEVEL=info
+EOF
+          
+          echo "✅ Fichier .env créé pour l'environnement CI"
+          echo "Contenu (masqué pour sécurité):"
+          sed 's/=.*/=***/' .env
+        '''
+      }
+    }
+
+    stage('Build') {
+      parallel {
+        stage('Build Backend') {
+          steps {
+            sh '''#!/bin/bash
+              set -euo pipefail
+              echo "🏗️ Construction de l'image backend..."
+              
+              if command -v docker-compose >/dev/null 2>&1; then
+                COMPOSE_CLI="docker-compose"
+              else
+                COMPOSE_CLI="docker compose"
+              fi
+              
+              # Build du backend avec cache layers optimisé
+              $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" \
+                build backend --pull --no-cache
+              
+              echo "✅ Image backend construite avec succès"
+            '''
+          }
+        }
+        stage('Build Frontend') {
+          steps {
+            sh '''#!/bin/bash
+              set -euo pipefail
+              echo "🏗️ Construction de l'image frontend..."
+              
+              if command -v docker-compose >/dev/null 2>&1; then
+                COMPOSE_CLI="docker-compose"
+              else
+                COMPOSE_CLI="docker compose"
+              fi
+              
+              # Build du frontend
+              $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" \
+                build frontend --pull --no-cache
+              
+              echo "✅ Image frontend construite avec succès"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Tests') {
+      steps {
+        sh '''#!/bin/bash
+          set -euo pipefail
+          echo "🧪 Lancement des tests unitaires et d'intégration..."
+          
+          if command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CLI="docker-compose"
+          else
+            COMPOSE_CLI="docker compose"
+          fi
+          
+          # Nettoyer l'environnement précédent
+          $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" down --remove-orphans || true
+          
+          # Démarrer les services de test
+          echo "🚀 Démarrage des services pour les tests..."
+          $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" up -d db
+          
+          # Attendre que la DB soit prête
+          echo "⏳ Attente de la base de données..."
+          timeout 60 bash -c 'until $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" exec -T db pg_isready -U myapp -d mydb; do sleep 2; done'
+          
+          # Lancer les tests backend
+          echo "🎯 Exécution des tests backend..."
+          $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" run --rm backend npm test
+          
+          echo "✅ Tests passés avec succès"
+        '''
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        retry(3) {
+          sh '''#!/bin/bash
+            set -euo pipefail
+            echo "🚀 Déploiement des services en environnement CI..."
+            
+            if command -v docker-compose >/dev/null 2>&1; then
+              COMPOSE_CLI="docker-compose"
+            else
+              COMPOSE_CLI="docker compose"
+            fi
+            
+            # Nettoyer et déployer
+            $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" down --remove-orphans || true
+            
+            # Démarrer tous les services
+            $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" up -d --force-recreate
+            
+            # Attendre que tous les services soient prêts
+            echo "⏳ Vérification de la santé des services..."
+            sleep 10
+            
+            # Vérifier la santé de la DB
+            timeout 60 bash -c 'until $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" exec -T db pg_isready -U myapp -d mydb; do sleep 2; done'
+            echo "✅ Base de données initialisée"
+            
+            # Vérifier le backend
+            timeout 60 bash -c 'until curl -f http://localhost:8085/health >/dev/null 2>&1; do sleep 3; done'
+            echo "✅ Backend démarré et accessible"
+            
+            # Vérifier le frontend
+            timeout 60 bash -c 'until curl -f http://localhost:8084/ >/dev/null 2>&1; do sleep 3; done'
+            echo "✅ Frontend démarré et accessible"
+            
+            echo "🎉 Déploiement réussi!"
+          '''
+        }
+      }
+    }
+
+    stage('Smoke Tests') {
+      steps {
+        sh '''#!/bin/bash
+          set -euo pipefail
+          echo "🔥 Tests de fumée sur l'application déployée..."
+          
+          if command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CLI="docker-compose"
+          else
+            COMPOSE_CLI="docker compose"
+          fi
+          
+          # Test API Health Check
+          echo "Testing Backend Health..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/health)
+          if [ "$RESPONSE" = "200" ]; then
+            echo "✅ Backend health check passed"
+          else
+            echo "❌ Backend health check failed (HTTP $RESPONSE)"
+            exit 1
+          fi
+          
+          # Test Frontend
+          echo "Testing Frontend..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8084/)
+          if [ "$RESPONSE" = "200" ]; then
+            echo "✅ Frontend accessible"
+          else
+            echo "❌ Frontend not accessible (HTTP $RESPONSE)"
+            exit 1
+          fi
+          
+          # Test Database Connection
+          echo "Testing Database Connection..."
+          $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" exec -T db psql -U myapp -d mydb -c "SELECT 1;" >/dev/null
+          echo "✅ Database connection successful"
+          
+          # Afficher l'état des services
+          echo "📊 État final des services:"
+          $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" ps
+          
+          echo "🎯 Tous les tests de fumée sont passés!"
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        sh '''#!/bin/bash
+          set -euo pipefail
+          if command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CLI="docker-compose"
+          else
+            COMPOSE_CLI="docker compose"
+          fi
+          
+          echo "🧹 Nettoyage des ressources de test..."
+          # Ne pas nettoyer sur la branche main pour garder l'environnement
+          if [ "${BRANCH_NAME:-}" != "main" ]; then
+            $COMPOSE_CLI -f "$COMPOSE_BASE" -f "$COMPOSE_CI" -f "$COMPOSE_OVERRIDE" down -v || true
+            echo "✅ Environnement de test nettoyé"
+          else
+            echo "ℹ️ Environnement conservé (branche main)"
+          fi
+        '''
+      }
+      cleanWs()
+    }
+    success { 
+      echo '🎉 ✅ Pipeline Backend complet réussi !'
+      echo '📊 Résultats:'
+      echo '   - Build: ✅'
+      echo '   - Tests: ✅'  
+      echo '   - Déploiement: ✅'
+      echo '   - Smoke Tests: ✅'
+    }
+    failure { 
+      echo '❌ Échec du pipeline backend'
+      sh '''#!/bin/bash
+        echo "🔍 Informations de débogage:"
+        docker ps -a || true
+        if command -v docker-compose >/dev/null 2>&1; then
+          docker-compose -f compose.yml -f compose.ci.yml -f compose.override.ci.yml logs --tail=50 || true
+        else
+          docker compose -f compose.yml -f compose.ci.yml -f compose.override.ci.yml logs --tail=50 || true
+        fi
+      '''
+    }
+  }
+}
