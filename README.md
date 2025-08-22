@@ -12,10 +12,12 @@ docker compose -f compose.yml -f compose.override.dev.yml up --build
 docker compose -f compose.yml -f compose.ci.yml up --build
 ```
 
-## 📡 URLs
-- **Backend:** http://localhost:8085
-- **Frontend:** http://localhost:8084
-- **Database:** PostgreSQL sur port 5432
+## Services
+
+- **Backend NestJS** : http://localhost:8085
+- **Frontend Angular** : http://localhost:8083  
+- **Base de données** : PostgreSQL (port interne 5432)
+- **Health Check** : http://localhost:8085/health
 
 ## 🏗️ Architecture
 
